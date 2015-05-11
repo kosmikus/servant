@@ -1,9 +1,9 @@
-{ mkDerivation, aeson, attoparsec, base, bytestring
-, bytestring-conversion, directory, doctest, either, exceptions
-, filemanip, hspec, hspec-wai, http-types, mmorph, mtl, network
-, network-uri, parsec, QuickCheck, safe, servant, split, stdenv
-, string-conversions, system-filepath, temporary, text
-, transformers, wai, wai-app-static, wai-extra, warp
+{ mkDerivation, aeson, attoparsec, base, base64-bytestring
+, bytestring, bytestring-conversion, directory, doctest, either
+, exceptions, filemanip, hspec, hspec-wai, http-types, mmorph, mtl
+, network, network-uri, parsec, QuickCheck, safe, servant, split
+, stdenv, string-conversions, system-filepath, temporary, text
+, transformers, wai, wai-app-static, wai-extra, warp, word8
 }:
 mkDerivation {
   pname = "servant-server";
@@ -12,9 +12,10 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   buildDepends = [
-    aeson attoparsec base bytestring either http-types mmorph mtl
-    network-uri safe servant split string-conversions system-filepath
-    text transformers wai wai-app-static warp
+    aeson attoparsec base base64-bytestring bytestring either
+    http-types mmorph mtl network-uri safe servant split
+    string-conversions system-filepath text transformers wai
+    wai-app-static warp word8
   ];
   testDepends = [
     aeson base bytestring bytestring-conversion directory doctest
