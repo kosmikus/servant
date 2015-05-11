@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE PolyKinds          #-}
 {-# OPTIONS_HADDOCK not-home    #-}
-module Servant.API.Authentication where
+module Servant.API.Authentication (BasicAuth) where
 
 import           Data.Typeable (Typeable)
 import           GHC.TypeLits  (Symbol)
