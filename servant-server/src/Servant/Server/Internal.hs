@@ -70,11 +70,11 @@ type Server layout = ServerT layout (EitherT ServantErr IO)
 -- | A type-indexed class to encapsulate Basic authentication handling.
 -- Authentication handling is indexed by the lookup type.
 --
--- >>> data AuthDB
--- >>> data User
--- >>> instance BasicAuthLookup AuthDB where
--- >>>   type BasicAuthVal = User
--- >>>   basicAuthLookup _ _ _ = return Nothing
+-- > data ExampleAuthDB
+-- > data ExampleUser
+-- > instance BasicAuthLookup ExampleAuthDB where
+-- >   type BasicAuthVal = ExampleUser
+-- >   basicAuthLookup _ _ _ = return Nothing
 class BasicAuthLookup lookup where
     type BasicAuthVal
     basicAuthLookup :: Proxy lookup -> B.ByteString -> B.ByteString -> IO (Maybe BasicAuthVal)
@@ -258,7 +258,7 @@ instance
       where
         realmBytes = (fromString . symbolVal) (Proxy :: Proxy realm)
         headerBytes = "Basic realm=\"" <> realmBytes <> "\""
-        authFailure401 = responseLBS status401 [("WWW Authenticate", headerBytes)] ""
+        authFailure401 = responseLBS status401 [("WWW-Authenticate", headerBytes)] ""
         checkB64AndRespond encoded =
             case B.uncons passwordWithColonAtHead of
                 Just (_, password) -> do
@@ -270,7 +270,7 @@ instance
                             route (Proxy :: Proxy sublayout) (action authData) request respond
 
                 -- no username:password present
-                Nothing            -> respond . succeedWith $ authFailure403
+                Nothing            -> respond . succeedWith $ authFailure401
           where
             authFailure403 = responseLBS status403 [] ""
             raw = decodeLenient encoded
