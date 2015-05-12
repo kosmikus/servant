@@ -229,14 +229,14 @@ instance
 #if MIN_VERSION_base(4,8,0)
          {-# OVERLAPPABLE #-}
 #endif
-         (HasServer sublayout, BasicAuthLookup lookup authVal) => HasServer (BasicAuth realm authVal :> sublayout) where
-    type ServerT (BasicAuth realm authVal :> sublayout) m = authVal -> ServerT sublayout m
+         (HasServer sublayout, BasicAuthLookup lookup authVal) => HasServer (BasicAuth realm lookup authVal :> sublayout) where
+    type ServerT (BasicAuth realm lookup authVal :> sublayout) m = authVal -> ServerT sublayout m
     route proxy action request response =
         case lookup "Authorization" (requestHeaders request) of
             Nothing     -> error "handle no authorization header" -- 401
             Just authBs ->
                 -- ripped from: https://hackage.haskell.org/package/wai-extra-1.3.4.5/docs/src/Network-Wai-Middleware-HttpAuth.html#basicAuth
-                let (x,y) = B.break isSpace authBs in 
+                let (x,y) = B.break isSpace authBs in
                     if B.map toLower x == "basic"
                     then checkB64 (B.dropWhile isSpace y)
                     else error "not basic authentication" -- 401
@@ -249,7 +249,7 @@ instance
                     case maybeAuthData of
                         Nothing         -> error "bad password" -- 403
                         (Just authData) ->
-                            route (Proxy :: Proxy sublayout) (action authData) request
+                            route (Proxy :: Proxy sublayout) (action authData) request response
 
                 -- no username:password present
                 Nothing            -> error "No password" -- 403
