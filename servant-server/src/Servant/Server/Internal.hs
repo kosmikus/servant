@@ -10,7 +10,6 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE UndecidableInstances   #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances   #-}
 #endif
@@ -231,7 +230,7 @@ instance
 #endif
          (HasServer sublayout, BasicAuthLookup lookup authVal) => HasServer (BasicAuth realm lookup authVal :> sublayout) where
     type ServerT (BasicAuth realm lookup authVal :> sublayout) m = authVal -> ServerT sublayout m
-    route proxy action request response =
+    route _ action request response =
         case lookup "Authorization" (requestHeaders request) of
             Nothing     -> error "handle no authorization header" -- 401
             Just authBs ->
