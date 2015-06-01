@@ -244,35 +244,36 @@ instance
     type ServerT (BasicAuth realm lookup :> sublayout) m
         = BasicAuthVal -> ServerT sublayout m
 
-    route _ action request respond =
-        case lookup "Authorization" (requestHeaders request) of
-            Nothing     -> respond . succeedWith $ authFailure401
-            Just authBs ->
-                -- ripped from: https://hackage.haskell.org/package/wai-extra-1.3.4.5/docs/src/Network-Wai-Middleware-HttpAuth.html#basicAuth
-                let (x,y) = B.break isSpace authBs in
-                    if B.map toLower x == "basic"
-                         -- check base64-encoded password
-                    then checkB64AndRespond (B.dropWhile isSpace y)
-                         -- Authenticaiton header is not Basic, fail with 401.
-                    else respond . succeedWith $ authFailure401
+    route _ action = WithRequest $ \ request ->
+        route (Proxy :: Proxy sublayout) $ do
+            case lookup "Authorization" (requestHeaders request) of
+                Nothing     -> return $ failWith $ authFailure401
+                Just authBs ->
+                    -- ripped from: https://hackage.haskell.org/package/wai-extra-1.3.4.5/docs/src/Network-Wai-Middleware-HttpAuth.html#basicAuth
+                    let (x,y) = B.break isSpace authBs in
+                        if B.map toLower x == "basic"
+                             -- check base64-encoded password
+                        then checkB64AndRespond (B.dropWhile isSpace y)
+                             -- Authenticaiton header is not Basic, fail with 401.
+                        else return $ failWith $ authFailure401
       where
         realmBytes = (fromString . symbolVal) (Proxy :: Proxy realm)
         headerBytes = "Basic realm=\"" <> realmBytes <> "\""
-        authFailure401 = responseLBS status401 [("WWW-Authenticate", headerBytes)] ""
+        authFailure401 = HttpError status401 [("WWW-Authenticate", headerBytes)] (Just "")
         checkB64AndRespond encoded =
             case B.uncons passwordWithColonAtHead of
                 Just (_, password) -> do
                     -- let's check these credentials using the user-provided lookup method
                     maybeAuthData <- basicAuthLookup (Proxy :: Proxy lookup) username password
                     case maybeAuthData of
-                        Nothing         -> respond . succeedWith $ authFailure403
+                        Nothing         -> return $ failWith $ authFailure403
                         (Just authData) ->
-                            route (Proxy :: Proxy sublayout) (action authData) request respond
+                            feedTo action authData
 
                 -- no username:password present
-                Nothing            -> respond . succeedWith $ authFailure401
+                Nothing            -> return $ failWith $ authFailure401
           where
-            authFailure403 = responseLBS status403 [] ""
+            authFailure403 = HttpError status403 [] (Just "")
             raw = decodeLenient encoded
             -- split username and password at the colon ':' char.
             (username, passwordWithColonAtHead) = B.breakByte _colon raw

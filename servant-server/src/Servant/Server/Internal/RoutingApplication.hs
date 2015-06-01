@@ -15,7 +15,7 @@ import           Data.IORef                  (newIORef, readIORef, writeIORef)
 import           Data.Maybe                  (fromMaybe)
 import           Data.Monoid                 ((<>))
 import           Data.String                 (fromString)
-import           Network.HTTP.Types          hiding (Header, ResponseHeaders)
+import           Network.HTTP.Types          hiding (ResponseHeaders)
 import           Network.Wai                 (Application, Request, Response,
                                               ResponseReceived,
                                               requestBody,
@@ -51,7 +51,7 @@ data RouteMismatch =
   | WrongMethod        -- ^ a more informative "you just got the HTTP method wrong" error
   | UnsupportedMediaType -- ^ request body has unsupported media type
   | InvalidBody String -- ^ an even more informative "your json request body wasn't valid" error
-  | HttpError Status (Maybe BL.ByteString)  -- ^ an even even more informative arbitrary HTTP response code error.
+  | HttpError Status [Header] (Maybe BL.ByteString)  -- ^ an even even more informative arbitrary HTTP response code error.
   deriving (Eq, Ord, Show)
 
 instance Monoid RouteMismatch where
@@ -101,8 +101,8 @@ toApplication ra request respond = do
     respond $ responseLBS badRequest400 [] $ fromString $ "invalid request body: " ++ err
   routingRespond (Left UnsupportedMediaType) =
     respond $ responseLBS unsupportedMediaType415 [] "unsupported media type"
-  routingRespond (Left (HttpError status body)) =
-    respond $ responseLBS status [] $ fromMaybe (BL.fromStrict $ statusMessage status) body
+  routingRespond (Left (HttpError status headers body)) =
+    respond $ responseLBS status headers $ fromMaybe (BL.fromStrict $ statusMessage status) body
   routingRespond (Right response) =
     respond response
 
