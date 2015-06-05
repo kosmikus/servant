@@ -119,10 +119,7 @@ import Servant.API.ReqBody ( ReqBody )
 import Servant.API.QueryParam ( QueryParam, QueryParams, QueryFlag )
 import Servant.API.MatrixParam ( MatrixParam, MatrixParams, MatrixFlag )
 import Servant.API.Header ( Header )
-import Servant.API.Get ( Get )
-import Servant.API.Post ( Post )
-import Servant.API.Put ( Put )
-import Servant.API.Delete ( Delete )
+import Servant.API.Method ( Delete, Get, Patch, Post, Put )
 import Servant.API.Sub ( type (:>) )
 import Servant.API.Raw ( Raw )
 import Servant.API.Alternative ( type (:<|>) )
@@ -175,10 +172,11 @@ type family IsElem endpoint api :: Constraint where
     IsElem sa (MatrixParam x y :> sb)       = IsElem sa sb
     IsElem sa (MatrixParams x y :> sb)      = IsElem sa sb
     IsElem sa (MatrixFlag x :> sb)          = IsElem sa sb
+    IsElem (Delete ct typ) (Delete ct' typ) = IsSubList ct ct'
     IsElem (Get ct typ) (Get ct' typ)       = IsSubList ct ct'
+    IsElem (Patch ct typ) (Patch ct' typ)   = IsSubList ct ct'
     IsElem (Post ct typ) (Post ct' typ)     = IsSubList ct ct'
     IsElem (Put ct typ) (Put ct' typ)       = IsSubList ct ct'
-    IsElem (Delete ct typ) (Delete ct' typ) = IsSubList ct ct'
     IsElem e e                              = ()
     IsElem e a                              = IsElem' e a
 

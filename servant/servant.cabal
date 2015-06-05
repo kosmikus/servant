@@ -31,14 +31,10 @@ library
     Servant.API.Alternative
     Servant.API.Capture
     Servant.API.ContentTypes
-    Servant.API.Delete
-    Servant.API.Get
     Servant.API.Header
-    Servant.API.Patch
-    Servant.API.Post
-    Servant.API.Put
     Servant.API.QueryParam
     Servant.API.MatrixParam
+    Servant.API.Method
     Servant.API.Raw
     Servant.API.ReqBody
     Servant.API.ResponseHeaders

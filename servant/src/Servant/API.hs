@@ -22,16 +22,7 @@ module Servant.API (
   -- | Retrieving matrix parameters from the 'URI' segment: @'MatrixParam'@
 
   -- * Actual endpoints, distinguished by HTTP method
-  module Servant.API.Get,
-  -- | @GET@ requests
-  module Servant.API.Post,
-  -- | @POST@ requests
-  module Servant.API.Delete,
-  -- | @DELETE@ requests
-  module Servant.API.Put,
-  -- | @PUT@ requests
-  module Servant.API.Patch,
-  -- | @PATCH@ requests
+  module Servant.API.Method,
 
   -- * Content Types
   module Servant.API.ContentTypes,
@@ -61,14 +52,15 @@ import           Servant.API.ContentTypes    (Accept (..), FormUrlEncoded,
                                               MimeRender (..),
                                               MimeUnrender (..), OctetStream,
                                               PlainText, ToFormUrlEncoded (..))
-import           Servant.API.Delete          (Delete)
-import           Servant.API.Get             (Get)
 import           Servant.API.Header          (Header (..))
 import           Servant.API.MatrixParam     (MatrixFlag, MatrixParam,
                                               MatrixParams)
-import           Servant.API.Patch           (Patch)
-import           Servant.API.Post            (Post)
-import           Servant.API.Put             (Put)
+import           Servant.API.Method          (Method, MethodDelete,
+                                              MethodGet, MethodPatch,
+                                              MethodPost, MethodPut,
+                                              Delete (..),
+                                              Get (..), Patch (..), Post (..),
+                                              Put (..))
 import           Servant.API.QueryParam      (QueryFlag, QueryParam,
                                               QueryParams)
 import           Servant.API.Raw             (Raw)
