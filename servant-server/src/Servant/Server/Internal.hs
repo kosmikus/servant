@@ -6,8 +6,10 @@
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
 #endif
@@ -34,13 +36,16 @@ import qualified Data.Text                   as T
 import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
 import           Data.Typeable
 import           GHC.TypeLits                (KnownSymbol, symbolVal)
-import           Network.HTTP.Types          hiding (Header, ResponseHeaders)
+import           Network.HTTP.Types          hiding (Header, Method, ResponseHeaders)
+import qualified Network.HTTP.Types          as H
 import           Network.Wai                 (Application, lazyRequestBody,
                                               rawQueryString, requestHeaders,
                                               requestMethod, responseLBS)
 import           Servant.API                 ((:<|>) (..), (:>), Capture,
-                                               Delete, Get, Header,
+                                               Delete (..), Get, Header,
                                               MatrixFlag, MatrixParam, MatrixParams,
+                                              Method, MethodDelete, MethodGet,
+                                              MethodPatch, MethodPost, MethodPut,
                                               Patch, Post, Put, QueryFlag,
                                               QueryParam, QueryParams, Raw,
                                               ReqBody)
@@ -62,6 +67,27 @@ class HasServer layout where
   route :: Proxy layout -> IO (RouteResult (Server layout)) -> Router
 
 type Server layout = ServerT layout (EitherT ServantErr IO)
+
+class HasMethodServer method where
+  method :: Proxy method -> H.Method
+  status :: Proxy method -> H.Status
+  status _ = ok200
+
+instance HasMethodServer MethodDelete where
+  method _ = methodDelete
+
+instance HasMethodServer MethodGet    where
+  method _ = methodGet
+
+instance HasMethodServer MethodPatch  where
+  method _ = methodPatch
+
+instance HasMethodServer MethodPost   where
+  method _ = methodPost
+  status _ = created201
+
+instance HasMethodServer MethodPut    where
+  method _ = methodPut
 
 -- * Instances
 
@@ -121,7 +147,7 @@ instance (KnownSymbol capture, FromText a, HasServer sublayout)
 
 
 methodRouter :: (AllCTRender ctypes a)
-             => Method -> Proxy ctypes -> Status
+             => H.Method -> Proxy ctypes -> Status
              -> IO (RouteResult (EitherT ServantErr IO a))
              -> Router
 methodRouter method proxy status action = LeafRouter route'
@@ -139,7 +165,7 @@ methodRouter method proxy status action = LeafRouter route'
       | otherwise = respond $ failWith NotFound
 
 methodRouterHeaders :: (GetHeaders (Headers h v), AllCTRender ctypes v)
-                    => Method -> Proxy ctypes -> Status
+                    => H.Method -> Proxy ctypes -> Status
                     -> IO (RouteResult (EitherT ServantErr IO (Headers h v)))
                     -> Router
 methodRouterHeaders method proxy status action = LeafRouter route'
@@ -157,7 +183,7 @@ methodRouterHeaders method proxy status action = LeafRouter route'
           respond $ failWith WrongMethod
       | otherwise = respond $ failWith NotFound
 
-methodRouterEmpty :: Method
+methodRouterEmpty :: H.Method
                   -> IO (RouteResult (EitherT ServantErr IO ()))
                   -> Router
 methodRouterEmpty method action = LeafRouter route'
@@ -170,6 +196,46 @@ methodRouterEmpty method action = LeafRouter route'
           respond $ failWith WrongMethod
       | otherwise = respond $ failWith NotFound
 
+instance 
+#if MIN_VERSION_base(4,8,0)
+         {-# OVERLAPPABLE #-}
+#endif
+         ( HasMethodServer method
+         , AllCTRender ctypes a
+         ) => HasServer (Method method ctypes a) where
+
+  type ServerT (Method method ctypes a) m = m a
+
+  route _ = methodRouter (method (Proxy :: Proxy method))
+                         (Proxy :: Proxy ctypes)
+                         (status (Proxy :: Proxy method))
+
+instance
+#if MIN_VERSION_base(4,8,0)
+         {-# OVERLAPPING #-}
+#endif
+         ( HasMethodServer method
+         ) => HasServer (Method method ctypes ()) where
+
+  type ServerT (Method method ctypes ()) m = m ()
+
+  route _ = methodRouterEmpty (method (Proxy :: Proxy method))
+
+-- Add response headers
+instance
+#if MIN_VERSION_base(4,8,0)
+         {-# OVERLAPPING #-}
+#endif
+         ( HasMethodServer method
+         , GetHeaders (Headers h v), AllCTRender ctypes v
+         ) => HasServer (Method method ctypes (Headers h v)) where
+
+  type ServerT (Method method ctypes (Headers h v)) m = m (Headers h v)
+
+  route _ = methodRouterHeaders (method (Proxy :: Proxy method))
+                                (Proxy :: Proxy ctypes)
+                                (status (Proxy :: Proxy method))
+
 -- | If you have a 'Delete' endpoint in your API,
 -- the handler for this endpoint is meant to delete
 -- a resource.
@@ -181,38 +247,12 @@ methodRouterEmpty method action = LeafRouter route'
 -- to be returned. You can use 'Control.Monad.Trans.Either.left' to
 -- painlessly error out if the conditions for a successful deletion
 -- are not met.
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPABLE #-}
-#endif
-         ( AllCTRender ctypes a
+instance ( HasServer (Method MethodDelete ctypes a) 
          ) => HasServer (Delete ctypes a) where
 
-  type ServerT (Delete ctypes a) m = m a
+   type ServerT (Delete ctypes a) m = ServerT (Method MethodDelete ctypes a) m
 
-  route Proxy = methodRouter methodDelete (Proxy :: Proxy ctypes) ok200
-
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         HasServer (Delete ctypes ()) where
-
-  type ServerT (Delete ctypes ()) m = m ()
-
-  route Proxy = methodRouterEmpty methodDelete
-
--- Add response headers
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         ( GetHeaders (Headers h v), AllCTRender ctypes v
-         ) => HasServer (Delete ctypes (Headers h v)) where
-
-  type ServerT (Delete ctypes (Headers h v)) m = m (Headers h v)
-
-  route Proxy = methodRouterHeaders methodDelete (Proxy :: Proxy ctypes) ok200
+   route _ = route (Proxy :: Proxy (Method MethodDelete ctypes a))
 
 -- | When implementing the handler for a 'Get' endpoint,
 -- just like for 'Servant.API.Delete.Delete', 'Servant.API.Post.Post'
@@ -227,38 +267,12 @@ instance
 -- (returning a status code of 200). If there was no @Accept@ header or it
 -- was @*\/\*@, we return encode using the first @Content-Type@ type on the
 -- list.
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPABLE #-}
-#endif
-         ( AllCTRender ctypes a ) => HasServer (Get ctypes a) where
+instance ( HasServer (Method MethodGet ctypes a)
+         ) => HasServer (Get ctypes a) where
 
-  type ServerT (Get ctypes a) m = m a
+  type ServerT (Get ctypes a) m = ServerT (Method MethodGet ctypes a) m
 
-  route Proxy = methodRouter methodGet (Proxy :: Proxy ctypes) ok200
-
--- '()' ==> 204 No Content
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-          HasServer (Get ctypes ()) where
-
-  type ServerT (Get ctypes ()) m = m ()
-
-  route Proxy = methodRouterEmpty methodGet
-
--- Add response headers
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-          ( GetHeaders (Headers h v), AllCTRender ctypes v
-          ) => HasServer (Get ctypes (Headers h v)) where
-
-  type ServerT (Get ctypes (Headers h v)) m = m (Headers h v)
-
-  route Proxy = methodRouterHeaders methodGet (Proxy :: Proxy ctypes) ok200
+  route _ = route (Proxy :: Proxy (Method MethodGet ctypes a))
 
 -- | If you use 'Header' in one of the endpoints for your API,
 -- this automatically requires your server-side handler to be a function
@@ -304,38 +318,12 @@ instance (KnownSymbol sym, FromText a, HasServer sublayout)
 -- (returning a status code of 201). If there was no @Accept@ header or it
 -- was @*\/\*@, we return encode using the first @Content-Type@ type on the
 -- list.
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPABLE #-}
-#endif
-         ( AllCTRender ctypes a
+instance ( HasServer (Method MethodPost ctypes a)
          ) => HasServer (Post ctypes a) where
 
-  type ServerT (Post ctypes a) m = m a
+  type ServerT (Post ctypes a) m = ServerT (Method MethodPost ctypes a) m
 
-  route Proxy = methodRouter methodPost (Proxy :: Proxy ctypes) created201
-
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         HasServer (Post ctypes ()) where
-
-  type ServerT (Post ctypes ()) m = m ()
-
-  route Proxy = methodRouterEmpty methodPost
-
--- Add response headers
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         ( GetHeaders (Headers h v), AllCTRender ctypes v
-         ) => HasServer (Post ctypes (Headers h v)) where
-
-  type ServerT (Post ctypes (Headers h v)) m = m (Headers h v)
-
-  route Proxy = methodRouterHeaders methodPost (Proxy :: Proxy ctypes) created201
+  route _ = route (Proxy :: Proxy (Method MethodPost ctypes a))
 
 -- | When implementing the handler for a 'Put' endpoint,
 -- just like for 'Servant.API.Delete.Delete', 'Servant.API.Get.Get'
@@ -350,37 +338,12 @@ instance
 -- (returning a status code of 200). If there was no @Accept@ header or it
 -- was @*\/\*@, we return encode using the first @Content-Type@ type on the
 -- list.
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPABLE #-}
-#endif
-         ( AllCTRender ctypes a) => HasServer (Put ctypes a) where
+instance ( HasServer (Method MethodPut ctypes a)
+         ) => HasServer (Put ctypes a) where
 
-  type ServerT (Put ctypes a) m = m a
+  type ServerT (Put ctypes a) m = ServerT (Method MethodPut ctypes a) m
 
-  route Proxy = methodRouter methodPut (Proxy :: Proxy ctypes) ok200
-
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         HasServer (Put ctypes ()) where
-
-  type ServerT (Put ctypes ()) m = m ()
-
-  route Proxy = methodRouterEmpty methodPut
-
--- Add response headers
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         ( GetHeaders (Headers h v), AllCTRender ctypes v
-         ) => HasServer (Put ctypes (Headers h v)) where
-
-  type ServerT (Put ctypes (Headers h v)) m = m (Headers h v)
-
-  route Proxy = methodRouterHeaders methodPut (Proxy :: Proxy ctypes) ok200
+  route _ = route (Proxy :: Proxy (Method MethodPut ctypes a))
 
 -- | When implementing the handler for a 'Patch' endpoint,
 -- just like for 'Servant.API.Delete.Delete', 'Servant.API.Get.Get'
@@ -393,37 +356,12 @@ instance
 -- If successfully returning a value, we just require that its type has
 -- a 'ToJSON' instance and servant takes care of encoding it for you,
 -- yielding status code 200 along the way.
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPABLE #-}
-#endif
-         ( AllCTRender ctypes a) => HasServer (Patch ctypes a) where
+instance ( HasServer (Method MethodPatch ctypes a)
+         ) => HasServer (Patch ctypes a) where
 
-  type ServerT (Patch ctypes a) m = m a
+  type ServerT (Patch ctypes a) m = ServerT (Method MethodPatch ctypes a) m
 
-  route Proxy = methodRouter methodPatch (Proxy :: Proxy ctypes) ok200
-
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-          HasServer (Patch ctypes ()) where
-
-  type ServerT (Patch ctypes ()) m = m ()
-
-  route Proxy = methodRouterEmpty methodPatch
-
--- Add response headers
-instance
-#if MIN_VERSION_base(4,8,0)
-         {-# OVERLAPPING #-}
-#endif
-         ( GetHeaders (Headers h v), AllCTRender ctypes v
-         ) => HasServer (Patch ctypes (Headers h v)) where
-
-  type ServerT (Patch ctypes (Headers h v)) m = m (Headers h v)
-
-  route Proxy = methodRouterHeaders methodPatch (Proxy :: Proxy ctypes) ok200
+  route _ = route (Proxy :: Proxy (Method MethodPatch ctypes a))
 
 -- | If you use @'QueryParam' "author" Text@ in one of the endpoints for your API,
 -- this automatically requires your server-side handler to be a function
